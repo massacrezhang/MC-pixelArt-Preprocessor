@@ -76,7 +76,7 @@
   },
   {
     "baseColor": 15,
-    "blockId": "minecraft:acacia_slab[type=top,waterlogged=false]",
+    "blockId": "minecraft:orange_concrete",
     "enabled": true
   },
   {
@@ -121,7 +121,7 @@
   },
   {
     "baseColor": 24,
-    "blockId": "minecraft:amethyst_block",
+    "blockId": "minecraft:purple_concrete",
     "enabled": true
   },
   {
@@ -136,7 +136,7 @@
   },
   {
     "baseColor": 27,
-    "blockId": "minecraft:moss_block",
+    "blockId": "minecraft:green_concrete",
     "enabled": true
   },
   {
