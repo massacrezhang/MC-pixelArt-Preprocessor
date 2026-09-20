@@ -11,7 +11,7 @@
   },
   {
     "baseColor": 2,
-    "blockId": "minecraft:birch_slab[type=top,waterlogged=false]",
+    "blockId": "minecraft:sandstone_slab[type=top,waterlogged=false]",
     "enabled": true
   },
   {
@@ -71,7 +71,7 @@
   },
   {
     "baseColor": 14,
-    "blockId": "minecraft:pale_oak_slab[type=top,waterlogged=false]",
+    "blockId": "minecraft:diorite_slab[type=top,waterlogged=false]",
     "enabled": true
   },
   {
