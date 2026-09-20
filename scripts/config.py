@@ -25,6 +25,9 @@ def find_workspace_root(start_path: Path) -> Path:
 SCRIPT_DIR = Path(__file__).resolve().parent
 WORKSPACE_ROOT = find_workspace_root(SCRIPT_DIR)
 PICS_DIR = WORKSPACE_ROOT / "PICS"
+PRESETS_DIR = WORKSPACE_ROOT / "presets"
+PIC3D_PATH = PRESETS_DIR / "pic3d.png"
+PICFLAT_PATH = PRESETS_DIR / "picflat.png"
 
 # =============================================================================
 # 2. 地图画基础物理规格
@@ -32,9 +35,17 @@ PICS_DIR = WORKSPACE_ROOT / "PICS"
 TILE_SIZE = 128  # Minecraft 单张地图固定画幅尺寸 (128x128 像素)
 
 # =============================================================================
-# 3. 自适应抖动核心算法超参数
+# 3. 自适应抖动核心算法超参数与维度定义
 # =============================================================================
-DEFAULT_COLOR_MODE = "flat61"  # 默认工作模式: 61色平面地图画 (固定 Shadow=1 因子 220/255)
+DEFAULT_COLOR_MODE = "flat61"  # 基础平面工作模式
+DEFAULT_DIMENSION = "2d"       # 默认画作维度: "2d" (61色平面) 或 "3d" (183色立体)
+
+# Minecraft 地图光影乘数因子 (Shadow 0~2 可原版生存实现，Shadow 3 仅纯文件)
+SHADOW_FACTORS = {
+    0: 180.0 / 255.0,  # 阴影 0 (较暗，相对北侧高度下降 y < y_north)
+    1: 220.0 / 255.0,  # 阴影 1 (标准，与北侧同高 y == y_north，平面画唯一基准)
+    2: 255.0 / 255.0,  # 阴影 2 (较亮，相对北侧高度上升 y > y_north)
+}
 
 # 基础抖动强度 (推荐范围 0.70 ~ 0.95，默认 0.85)
 # 控制全局色彩混合质感（以视觉效果/抖动为主）。调大渐变更柔和；调小偏纯色块感。

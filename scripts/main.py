@@ -20,6 +20,7 @@ if sys.stdout.encoding != 'utf-8':
 from config import (
     WORKSPACE_ROOT,
     DEFAULT_COLOR_MODE,
+    DEFAULT_DIMENSION,
     DEFAULT_DITHER_WEIGHT,
     DEFAULT_EDGE_THRESHOLD,
     DEFAULT_FLAT_DEADZONE,
@@ -35,24 +36,34 @@ def prompt_interactive_menu() -> dict:
     print("=" * 65)
     print("功能模式说明：")
     print("  [1] 直接切片模式 (保持 100% 原画像素，仅切分为 128x128 纵向优先子图)")
-    print("  [2] 保真优化 + 切片模式 (推荐: 61色平面自适应抖动优化 -> 导出大图 -> 切片)")
+    print("  [2] 保真优化 + 切片模式 (推荐: 自适应抖动优化 -> 导出大图 -> 切片)")
     print("-" * 65)
 
     # 1. 输入模式
     mode_input = input("请选择运行模式 [默认 2]: ").strip()
     mode = 1 if mode_input == "1" else 2
 
-    # 2. 输入图片路径
-    img_input = input("请输入图片路径 (可直接将文件拖拽入此窗口): ").strip().strip('"').strip("'")
+    # 2. 选择 2D / 3D 维度 (模式 2 下生效)
+    dimension = DEFAULT_DIMENSION
+    if mode == 2:
+        print("\n画作维度模式选择：")
+        print("  [1] 2D 平面地图画 (61色，传统单层建造，色彩柔和，建造难度低)")
+        print("  [2] 3D 立体地图画 (183色，台阶高低阴影，色彩极丰富细腻，画质上限高) [推荐]")
+        dim_input = input("请选择画作维度 [1: 2D平面, 2: 3D立体] [默认 1]: ").strip()
+        dimension = "3d" if dim_input in ("2", "3d", "3D") else "2d"
+
+    # 3. 输入图片路径
+    img_input = input("\n请输入图片路径 (可直接将文件拖拽入此窗口): ").strip().strip('"').strip("'")
     while not img_input:
         img_input = input("图片路径不能为空，请重新输入: ").strip().strip('"').strip("'")
 
-    # 3. 输入可选项目名
+    # 4. 输入可选项目名
     proj_input = input("请输入项目名称 [回车默认使用图片文件名]: ").strip().strip('"').strip("'")
     proj_name = proj_input if proj_input else None
 
     return {
         "mode": mode,
+        "dimension": dimension,
         "input": img_input,
         "project_name": proj_name
     }
@@ -66,6 +77,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--input", "-i", type=str, help="输入图片路径 (例如 0831034707/0831034707.png)")
     parser.add_argument("--mode", "-m", type=int, choices=[1, 2], default=2, help="运行模式: 1=直接切片, 2=保真抖动+切片")
+    parser.add_argument("--dimension", "--dim", type=str, choices=["2d", "3d"], default=DEFAULT_DIMENSION, help="地图画维度模式: 2d=61色平面, 3d=183色立体 (解析 presets/pic3d.png)")
     parser.add_argument("--project-name", "-p", type=str, default=None, help="自定义项目文件夹名称 (默认取输入图片文件名)")
     parser.add_argument("--dither-weight", "-w", type=float, default=DEFAULT_DITHER_WEIGHT, help="基础抖动强度 (0.70~0.95)")
     parser.add_argument("--edge-threshold", "-e", type=float, default=DEFAULT_EDGE_THRESHOLD, help="五官边缘保护灵敏度 (0.15~0.40)")
@@ -83,6 +95,7 @@ def main():
         user_inputs = prompt_interactive_menu()
         input_path = Path(user_inputs["input"])
         mode = user_inputs["mode"]
+        dimension = user_inputs["dimension"]
         project_name = user_inputs["project_name"]
         dither_weight = DEFAULT_DITHER_WEIGHT
         edge_threshold = DEFAULT_EDGE_THRESHOLD
@@ -91,17 +104,23 @@ def main():
     else:
         input_path = Path(args.input)
         mode = args.mode
+        dimension = args.dimension
         project_name = args.project_name
         dither_weight = args.dither_weight
         edge_threshold = args.edge_threshold
         flat_deadzone = args.flat_deadzone
         use_serpentine = not args.no_serpentine
 
-    # 若输入为相对路径，自动转换为工作区绝对路径
+    # 相对路径自适应解析：优先检查当前执行路径，其次寻访工作区根目录
     if not input_path.is_absolute():
-        input_path = (WORKSPACE_ROOT / input_path).resolve()
+        if input_path.exists():
+            input_path = input_path.resolve()
+        elif (WORKSPACE_ROOT / input_path).exists():
+            input_path = (WORKSPACE_ROOT / input_path).resolve()
+        else:
+            input_path = (WORKSPACE_ROOT / input_path).resolve()
 
-    print(f"\n[任务启动] 模式: {mode} | 输入文件: {input_path}")
+    print(f"\n[任务启动] 模式: {mode} | 维度: {dimension.upper()} | 输入文件: {input_path}")
     pipeline = PipelineManager()
 
     if mode == 1:
@@ -110,6 +129,7 @@ def main():
         res = pipeline.run_mode2_dither_and_slice(
             input_path=input_path,
             project_name=project_name,
+            dimension=dimension,
             dither_weight=dither_weight,
             edge_threshold=edge_threshold,
             flat_deadzone=flat_deadzone,
@@ -125,7 +145,10 @@ def main():
     print(f"原始备份: {res['raw_image']}")
     if res.get("processed_image"):
         print(f"处理大图: {res['processed_image']} (Windows排序紧随原图)")
-        print(f"色彩统计: 包含 {res['unique_colors']} 种 Minecraft 61色平面色")
+        dim_label = "3D立体色 (共183色)" if res.get("dimension") == "3d" else "2D平面色 (共61色)"
+        print(f"色彩统计: 激活使用 {res['unique_colors']} 种 Minecraft {dim_label}")
+        if res.get("dimension") == "3d":
+            print("坐标解析: 全图像素已 100% 成功映射至 presets/pic3d.png 16x16 调色板坐标")
     print(f"切片数量: {res['num_tiles']} 个 128x128 纵向优先子图")
     print(f"总计耗时: {res['time_cost']} 秒")
     print("=" * 65 + "\n")

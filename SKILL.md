@@ -23,13 +23,15 @@ description: Minecraft MapArt 图像预处理与自适应抖动优化工具箱�
 - **行为**：保持 100% 原始色彩与像素，原样复制原图到 `PICS/{project}/{project}.png`，并直接裁切为 128x128 纵向优先子图。
 
 ### 模式 2：保真优化 + 切片模式 (`--mode 2`，默认推荐)
-- **适用场景**：全彩原画、人物插画、风景图需转化为 Minecraft 61色平面地图画。
+- **适用场景**：全彩原画、人物插画、风景图转化为 Minecraft 地图画（支持 2D 61色平面与 3D 183色立体）。
 - **行为**：
   1. 复制保留原始未修改图片；
   2. 采用 **OKLab 感知色彩空间** 结合 **S型往复阻尼误差扩散** 进行抖动混色；
   3. **五官与线条保真（辅助保护）**：在眼睛、睫毛、发丝、唇线处阻断色差冲刷，保持纯净锐利线条；
   4. **大平坦背景去噪**：采用局部方差死区门限过滤，杜绝纯色背景蠕虫状噪点；
-  5. 生成 100% 匹配 61 色平面标准色的处理大图 `{project}.processed.png`；
+  5. 产物输出：
+     - **2D 平面 (`--dim 2d`)**：生成 100% 匹配 61 色平面标准色的处理大图 `{project}.processed.png`；
+     - **3D 立体 (`--dim 3d`)**：生成 183 色立体自适应抖动大图 `{project}.processed_3d.png`，并建立全图像素与 `presets/pic3d.png` 16x16 调色板坐标映射；
   6. 对处理后大图裁切为 128x128 纵向优先子图。
 
 ---
@@ -40,10 +42,11 @@ description: Minecraft MapArt 图像预处理与自适应抖动优化工具箱�
 
 ```text
 PICS/<project_name>/
-├── <project_name>.png            # ① 原始输入图像副本 (文件名严格保持原样)
-├── <project_name>.processed.png  # ② 处理后大图 (仅模式 2，Windows排序紧跟原图正后方)
-├── <project_name>_0.png          # ③ 128x128 纵向优先子图 0 (排在所有大图后面)
-├── <project_name>_1.png          # ④ 128x128 纵向优先子图 1
+├── <project_name>.png               # ① 原始输入图像副本 (文件名严格保持原样)
+├── <project_name>.processed.png     # ② 2D 处理后大图 (Windows排序紧跟原图正后方)
+├── <project_name>.processed_3d.png  # ② 或 3D 立体处理后大图 (183色高保真)
+├── <project_name>_0.png             # ③ 128x128 纵向优先子图 0 (排在所有大图后面)
+├── <project_name>_1.png             # ④ 128x128 纵向优先子图 1
 └── ...
 ```
 
@@ -54,8 +57,11 @@ PICS/<project_name>/
 ### 1. 命令行直接执行
 
 ```powershell
-# 推荐：模式 2 自动优化并切片
-& "D:\Software\miniforge3\envs\pymc\python.exe" "prep-slopecraft-image/scripts/main.py" --input "0831034707/0831034707.png" --mode 2
+# 推荐：模式 2 3D 立体优化并切片
+& "D:\Software\miniforge3\envs\pymc\python.exe" "prep-slopecraft-image/scripts/main.py" --input "0831034707/0831034707.png" --mode 2 --dim 3d
+
+# 模式 2 2D 平面优化并切片
+& "D:\Software\miniforge3\envs\pymc\python.exe" "prep-slopecraft-image/scripts/main.py" --input "0831034707/0831034707.png" --mode 2 --dim 2d
 
 # 模式 1 纯切片
 & "D:\Software\miniforge3\envs\pymc\python.exe" "prep-slopecraft-image/scripts/main.py" --input "0831034707/0831034707.png" --mode 1

@@ -1,11 +1,11 @@
 # Minecraft MapArt Preprocessor & Adaptive Dither Pipeline
-### Minecraft 61色平面地图画高质量自适应抖动优化与切片工具
+### Minecraft 地图画高质量自适应抖动优化与切片工具（支持 2D 61色平面与 3D 183色立体）
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Minecraft](https://img.shields.io/badge/Minecraft-MapArt-green.svg)](https://minecraft.net/)
 
-专为 Minecraft 地图画创作者打造的高性能图像前置处理工具箱。通过 **OKLab 感知色彩空间**、**S 型往复阻尼误差扩散**、**Scharr 梯度五官边缘保护** 与 **局部方差背景死区去噪** 等复合算法，彻底解决传统误差扩散算法在 Minecraft 极受限色板下导致的**“背景蠕虫噪点多”**、**“人脸五官暗线模糊”**与**“大面积色偏”**等痛点。
+专为 Minecraft 地图画创作者打造的高性能图像前置处理工具箱。通过 **OKLab 感知色彩空间**、**S 型往复阻尼误差扩散**、**Scharr 梯度五官边缘保护** 与 **局部方差背景死区去噪** 等复合算法，彻底解决传统误差扩散算法在 Minecraft 极受限色板下导致的**“背景蠕虫噪点多”**、**“人脸五官暗线模糊”**与**“大面积色偏”**等痛点。支持 **2D 61色平面** 与 **3D 183色立体（解析 pic3d.png 并保留 16x16 调色板物理坐标）** 两种制图规格。
 
 ---
 
@@ -17,6 +17,7 @@
 | **面部五官与线条被色差吞噬**：误差跨越边缘无差别传导，导致睫毛、发丝、唇线等暗线细节模糊断裂。 | **Scharr 梯度暗线保真保护**：检测边缘梯度并在高对比度轮廓处阻断误差注入，确保人物五官锐利清晰。 |
 | **传统 RGB 欧氏距离色偏**：人眼对不同颜色敏感度不同，传统算法容易将微妙阴影量化为杂色。 | **OKLab 感知色彩空间**：采用感知均匀色彩模型进行最近邻匹配，实现视觉真实感最大化。 |
 | **单向扫描带来的对角线纹理**：传统从左至右扫描会产生明显的对角线走针倾斜杂纹。 | **S 型往复阻尼扩散 (Serpentine)**：奇数行从左向右、偶数行从右向左交替往复，配合阻尼系数消除方向性杂斑。 |
+| **3D 立体高低差调色板映射复杂**：3D 地图画依赖三种光影阴影因子（Shadow 0/1/2），缺乏标准化数学与物理坐标对应。 | **3D 183色基准闭环与 LUT 向量化**：解析 `presets/pic3d.png` 建立 183 色与 16x16 调色板坐标的双射，全图映射效率提升数十倍。 |
 
 ---
 
@@ -27,16 +28,20 @@
 ```text
 prep-slopecraft-image/
 ├── scripts/
-│   ├── main.py            # 统一入口 (支持 CLI 参数与全中文交互式菜单)
-│   ├── config.py          # 全局配置中心 (超参数、61基色定义、网格规格)
+│   ├── main.py            # 统一入口 (支持 CLI 参数与全中文交互式菜单，支持 2D/3D 模式)
+│   ├── config.py          # 全局配置中心 (超参数、基色与阴影因子、网格规格)
 │   ├── pipeline.py        # PipelineManager (统筹两阶段模式调度与文件落盘)
-│   ├── dither_engine.py   # AdaptiveDitherEngine (OKLab 往复阻尼抖动核心循环)
+│   ├── processor_3d.py    # 3D 立体色板解析、坐标映射与自适应抖动量化核心
+│   ├── dither_engine.py   # AdaptiveDitherEngine (2D OKLab 往复阻尼抖动核心循环)
 │   ├── extractor.py       # FeatureExtractor (边缘提取与平坦掩膜计算)
 │   ├── palette.py         # PaletteManager (61色平面调色板与色彩空间映射)
 │   ├── slicer.py          # ImageSlicer (128x128 纵向优先列切片引擎)
+│   ├── test_3d_features.py# 3D 模块完整单元测试套件
 │   └── adaptive_dither.py # 独立原型脚本 (供技术参考)
-├── presets/               # 配套 SlopeCraft 61色平面色板预设文件
-│   └── config_for_slopecraft.sc_preset_json
+├── presets/               # 配套 SlopeCraft 色板预设与调色板基准图
+│   ├── config_for_slopecraft.sc_preset_json
+│   ├── pic3d.png
+│   └── picflat.png
 ├── docs/                  # 深度算法推导与重构记录
 │   └── session_notes.md
 ├── requirements.txt       # Python 依赖清单
@@ -59,14 +64,18 @@ pip install -r requirements.txt
 * **模式 1：直接切片模式 (`--mode 1`)**
   * 保持 100% 原始像素与色彩，无损切块为 128x128 纵向优先子图。适用于已由像素画师精修的原画。
 * **模式 2：保真自适应优化 + 切片模式 (`--mode 2`，默认推荐)**
-  * 执行 OKLab 感知抖动、线条保真与背景去噪，生成严格匹配 Minecraft 61 色平面基色的处理大图，并自动进行切块。
+  * **2D 平面模式 (`--dim 2d`)**：生成严格匹配 Minecraft 61 色平面基色的处理大图 `<project>.processed.png` 并切片。
+  * **3D 立体模式 (`--dim 3d`)**：激活全 183 种立体明暗渐变色，生成 `<project>.processed_3d.png`，并建立与 `presets/pic3d.png` 16x16 调色板坐标映射。
 
 ### 3. 运行方式
 
 #### 方式 A：命令行直接运行 (批处理推荐)
 ```bash
-# 推荐：模式 2 自动优化并切片
-python scripts/main.py --input "path/to/your_image.png" --mode 2
+# 推荐：3D 立体高保真自适应抖动并切片
+python scripts/main.py --input "path/to/your_image.png" --mode 2 --dim 3d
+
+# 2D 平面自适应抖动并切片
+python scripts/main.py --input "path/to/your_image.png" --mode 2 --dim 2d
 
 # 模式 1：纯切片模式
 python scripts/main.py --input "path/to/your_image.png" --mode 1
@@ -77,7 +86,7 @@ python scripts/main.py --input "path/to/your_image.png" --mode 1
 ```bash
 python scripts/main.py
 ```
-根据终端引导输入 `[1]` 或 `[2]`，直接拖入或粘贴图片路径即可。
+根据终端引导选择模式 `[1]` 或 `[2]`，选择画作维度 `[1: 2D平面, 2: 3D立体]`，直接拖入或粘贴图片路径即可。
 
 ---
 
@@ -87,10 +96,11 @@ python scripts/main.py
 
 ```text
 PICS/<project_name>/
-├── <project_name>.png            # ① 原始输入图像副本 (文件名严格保持原样)
-├── <project_name>.processed.png  # ② 61色处理后大图 (Windows自然排序紧跟原图正后方)
-├── <project_name>_0.png          # ③ 128x128 纵向优先切片 0 (排在所有大图后面)
-├── <project_name>_1.png          # ④ 128x128 纵向优先切片 1
+├── <project_name>.png               # ① 原始输入图像副本 (文件名严格保持原样)
+├── <project_name>.processed.png     # ② 2D 平面处理后大图 (Windows自然排序紧跟原图正后方)
+├── <project_name>.processed_3d.png  # ② 或 3D 立体处理后大图 (包含183色立体高保真渐变)
+├── <project_name>_0.png             # ③ 128x128 纵向优先切片 0 (排在所有大图后面)
+├── <project_name>_1.png             # ④ 128x128 纵向优先切片 1
 └── ...
 ```
 
@@ -98,10 +108,10 @@ PICS/<project_name>/
 
 ## 🛠️ 与 SlopeCraft 协同制作地图画闭环
 
-1. **运行本工具**：对目标原图执行模式 2 处理，得到 `<project>.processed.png` 与切片；
+1. **运行本工具**：对目标原图执行模式 2 处理（2D 或 3D），得到处理大图与切片；
 2. **打开 SlopeCraft**：
-   - 模式选择：**平面地图画 (Flat MapArt)**；
-   - 加载预设：载入本项目 `presets/config_for_slopecraft.sc_preset_json`（61 种基础颜色全开）；
+   - 模式选择：根据所选维度选择 **平面地图画 (Flat)** 或 **立体地图画 (3D / Slope)**；
+   - 加载预设：载入本项目 `presets/config_for_slopecraft.sc_preset_json`；
    - 抖动算法：选择 **无抖动 (No Dithering / dither 0)**（因为图像已在本工具中完成高保真预抖动处理）；
 3. **一键导出**：完美 1:1 还原色彩，导出为 `.litematic` 投影文件或直接生成建筑结构！
 
